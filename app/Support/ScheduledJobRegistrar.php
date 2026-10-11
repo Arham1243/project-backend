@@ -26,6 +26,7 @@ final class ScheduledJobRegistrar
     public function register(Schedule $schedule): void
     {
         $this->registerQueueHealthCheck($schedule);
+        $this->registerQueueWorker($schedule);
         $this->registerHeartbeat($schedule);
 
         if (! $this->shouldLoadDatabaseJobs()) {
@@ -144,6 +145,18 @@ final class ScheduledJobRegistrar
             ->everyMinute()
             ->name('scheduler-heartbeat')
             ->pingOnSuccess(trim($url));
+    }
+
+    /**
+     * Shared hosting has no long-running worker. The every-minute schedule:run
+     * cron drains queued jobs, then exits before the next tick.
+     */
+    private function registerQueueWorker(Schedule $schedule): void
+    {
+        $schedule->command('queue:work --queue=scheduled,default --stop-when-empty --max-time=50 --tries=1 --sleep=0')
+            ->everyMinute()
+            ->withoutOverlapping(2)
+            ->name('queue-worker');
     }
 
     private function registerQueueHealthCheck(Schedule $schedule): void
